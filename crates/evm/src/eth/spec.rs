@@ -17,6 +17,22 @@ pub trait EthExecutorSpec: EthereumHardforks {
 
     /// Convenience method to check if staking contract is active at a given timestamp.
     fn is_staking_activate_at_timestamp(&self, timestamp: u64) -> bool;
+
+    /// Address of the Bridge contract used for cross-chain inbound message execution.
+    ///
+    /// Returning `None` disables the bridge system call regardless of
+    /// [`Self::is_bridge_active_at_timestamp`].
+    fn bridge_contract_address(&self) -> Option<Address> {
+        None
+    }
+
+    /// Convenience method to check if the Bridge fork is active at a given timestamp.
+    ///
+    /// Default implementation returns `false` so chains that have not opted into the bridge
+    /// continue to behave exactly as before.
+    fn is_bridge_active_at_timestamp(&self, _timestamp: u64) -> bool {
+        false
+    }
 }
 
 /// Basic Ethereum specification.

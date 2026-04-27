@@ -39,6 +39,8 @@ pub enum StateChangePostBlockSource {
     ConsolidationRequestsContract,
     /// Staking distribution from block rewards and withdrawals
     StakingDistribution,
+    /// 0G Bridge inbound message execution (EIP-7685 type byte `0x05`).
+    BridgeExecution,
 }
 
 impl<F> OnStateHook for F

@@ -9,6 +9,7 @@ use super::{
 use crate::{
     block::{
         state_changes::{balance_increment_state, post_block_balance_increments},
+        system_calls::bridge,
         BlockExecutionError, BlockExecutionResult, BlockExecutor, BlockExecutorFactory,
         BlockExecutorFor, BlockValidationError, ExecutableTx, OnStateHook,
         StateChangePostBlockSource, StateChangeSource, SystemCaller,
@@ -35,6 +36,13 @@ pub struct EthBlockExecutionCtx<'a> {
     pub withdrawals: Option<Cow<'a, Withdrawals>>,
     /// Block timestamp.
     pub timestamp: u64,
+    /// 0G: Pre-encoded ABI calldata for `Bridge.executeRemoteMessages(InboundMessage[])`.
+    ///
+    /// Populated by the EL engine API when it observes an EIP-7685 request with type byte
+    /// `0x05` on a payload built after the Bridge fork. `None` when either the fork is
+    /// inactive, no bridge messages were emitted by CL, or the chain spec does not configure a
+    /// bridge contract address.
+    pub bridge_request: Option<Cow<'a, Bytes>>,
 }
 
 /// Block executor for Ethereum.
@@ -187,6 +195,22 @@ where
         } else {
             Requests::default()
         };
+
+        // 0G: Bridge inbound system call. Runs after EIP-7002/7251 post-execution requests
+        // (so witness coverage is co-located with the existing requests pipeline) and before
+        // post-block balance increments. Gated by `EthExecutorSpec::is_bridge_active_at_timestamp`.
+        if let Some(res) = bridge::transact_bridge_contract_call(
+            &self.spec,
+            self.ctx.timestamp,
+            self.ctx.bridge_request.as_deref(),
+            &mut self.evm,
+        )? {
+            self.system_caller.on_state(
+                StateChangeSource::PostBlock(StateChangePostBlockSource::BridgeExecution),
+                &res.state,
+            );
+            self.evm.db_mut().commit(res.state);
+        }
 
         let mut balance_increments = post_block_balance_increments(
             &self.spec,

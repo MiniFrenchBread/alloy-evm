@@ -15,6 +15,7 @@ use revm::{state::EvmState, DatabaseCommit};
 
 use super::{StateChangePostBlockSource, StateChangePreBlockSource, StateChangeSource};
 
+pub(crate) mod bridge;
 mod eip2935;
 mod eip4788;
 mod eip7002;

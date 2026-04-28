@@ -1,9 +1,10 @@
 //! 0G Bridge inbound message system call.
 //!
-//! This is the EL-side counterpart to the EIP-7685 request type `0x05` carried on the engine
-//! API. The CL beacon block emits a list of `BridgeMessage` items as SSZ bytes; the EL decodes
-//! them into ABI calldata for `Bridge.executeRemoteMessages(InboundMessage[])` and invokes the
-//! Bridge proxy contract from the canonical [`SYSTEM_ADDRESS`] just like EIP-4788/7002.
+//! This is the EL-side counterpart to the EIP-7685 request type `0xf0` carried on the engine
+//! API (private 0G namespace; see `docs/plans/cross-chain-bridge.md` §1.6.5). The CL beacon
+//! block emits a list of `BridgeMessage` items as SSZ bytes; the EL decodes them into ABI
+//! calldata for `Bridge.executeRemoteMessages(InboundMessage[])` and invokes the Bridge proxy
+//! contract from the canonical [`SYSTEM_ADDRESS`] just like EIP-4788/7002.
 //!
 //! Activation is gated by [`EthExecutorSpec::is_bridge_active_at_timestamp`] and a configured
 //! [`EthExecutorSpec::bridge_contract_address`]. The hook is a no-op (returns `Ok(None)`) when

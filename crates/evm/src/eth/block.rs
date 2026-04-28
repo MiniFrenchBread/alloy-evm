@@ -39,9 +39,10 @@ pub struct EthBlockExecutionCtx<'a> {
     /// 0G: Pre-encoded ABI calldata for `Bridge.executeRemoteMessages(InboundMessage[])`.
     ///
     /// Populated by the EL engine API when it observes an EIP-7685 request with type byte
-    /// `0x05` on a payload built after the Bridge fork. `None` when either the fork is
-    /// inactive, no bridge messages were emitted by CL, or the chain spec does not configure a
-    /// bridge contract address.
+    /// `0xf0` on a payload built after the Bridge fork (private 0G namespace; see
+    /// `docs/plans/cross-chain-bridge.md` §1.6.5). `None` when either the fork is inactive, no
+    /// bridge messages were emitted by CL, or the chain spec does not configure a bridge
+    /// contract address.
     pub bridge_request: Option<Cow<'a, Bytes>>,
 }
 

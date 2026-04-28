@@ -44,6 +44,22 @@ pub struct EthBlockExecutionCtx<'a> {
     /// bridge messages were emitted by CL, or the chain spec does not configure a bridge
     /// contract address.
     pub bridge_request: Option<Cow<'a, Bytes>>,
+    /// 0G: Original SSZ-encoded `BridgeRequests` blob the CL forwarded on
+    /// `engine_forkchoiceUpdatedV4.payloadAttributes.bridgeRequests` (build path) or extracted
+    /// from `payload.executionRequests` 0xf0 entry (verify path).
+    ///
+    /// Distinct from `bridge_request` (ABI calldata for the system call). This raw SSZ blob is
+    /// what gets re-emitted as the `0xf0` EIP-7685 entry in the requests list returned by
+    /// [`super::EthBlockExecutor::finish`]. Including it in the `requests` slice **before** the
+    /// block assembler computes `requests_hash` is what guarantees the proposer-built sealed
+    /// `block.header.requests_hash` matches the verifier's reconstruction (CL re-runs
+    /// `CalcRequestsHash` over the same wire bytes). See plan §1.6.4 / §2.A.10.
+    ///
+    /// `None` on the block-replay path (`context_for_block`) — the historical block's 0xf0 raw
+    /// bytes have no on-chain source (not in body, not in receipts), and the 0G `validate_block_post_execution`
+    /// is lenient (overwrites header rather than diffs), so omitting the entry is byte-for-byte
+    /// equivalent to the pre-fix replay behaviour.
+    pub bridge_request_raw: Option<Cow<'a, Bytes>>,
 }
 
 /// Block executor for Ethereum.
@@ -177,10 +193,11 @@ where
     fn finish(
         mut self,
     ) -> Result<(Self::Evm, BlockExecutionResult<R::Receipt>), BlockExecutionError> {
-        let requests = if self
+        let prague_active = self
             .spec
-            .is_prague_active_at_timestamp(self.evm.block().timestamp.saturating_to())
-        {
+            .is_prague_active_at_timestamp(self.evm.block().timestamp.saturating_to());
+
+        let mut requests = if prague_active {
             // Collect all EIP-6110 deposits
             let deposit_requests =
                 eip6110::parse_deposits_from_receipts(&self.spec, &self.receipts)?;
@@ -211,6 +228,28 @@ where
                 &res.state,
             );
             self.evm.db_mut().commit(res.state);
+        }
+
+        // 0G: Append the EIP-7685 type-0xf0 bridge entry to the executionRequests list using the
+        // **original SSZ blob** the CL forwarded (not recomputed). Must happen here — before
+        // `EthBlockAssembler::assemble_block` reads `requests` to compute `requests_hash` — so
+        // the proposer-built sealed `block.header.requests_hash` covers the 0xf0 entry. Without
+        // this, the EL header omits 0xf0 while the wire response includes it, and the CL's
+        // re-assembled block hash diverges from `payload.block_hash`. See
+        // `docs/plans/cross-chain-bridge.md` §1.6.4 / §2.A.10.
+        //
+        // Only push when:
+        //   * Prague is active (matches the `requests_hash` gate in `EthBlockAssembler`).
+        //   * `bridge_request_raw` was supplied (build path = `attrs.bridgeRequests`; verify
+        //     path = 0xf0 entry of `payload.executionRequests`). On replay (`context_for_block`)
+        //     the field is `None` and we skip — there is no on-chain source to recover the raw
+        //     SSZ from, and the 0G `validate_block_post_execution` is lenient (overwrites
+        //     header without diff), so the omission is byte-equivalent to the pre-fix replay
+        //     path.
+        if prague_active {
+            if let Some(raw) = self.ctx.bridge_request_raw.as_deref() {
+                requests.push_request_with_type(bridge::BRIDGE_REQUEST_TYPE, raw.clone());
+            }
         }
 
         let mut balance_increments = post_block_balance_increments(

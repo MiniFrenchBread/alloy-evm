@@ -19,6 +19,13 @@ use alloy_eips::eip7002::SYSTEM_ADDRESS;
 use alloy_primitives::Bytes;
 use revm::context_interface::result::ResultAndState;
 
+/// EIP-7685 request type byte for 0G's cross-chain Bridge messages (private namespace, §1.6.5).
+///
+/// Emitted as the **last** entry of `executionRequests` post-Bridge fork — strictly after the
+/// standard 0x00/0x01/0x02 (deposit/withdrawal/consolidation) entries to satisfy EIP-7685's
+/// monotonic type-byte ordering. See `docs/plans/cross-chain-bridge.md` §1.6.5.
+pub const BRIDGE_REQUEST_TYPE: u8 = 0xf0;
+
 /// Invokes `Bridge.executeRemoteMessages(InboundMessage[])` from [`SYSTEM_ADDRESS`].
 ///
 /// Returns `Ok(None)` (no-op) if any of the following gates is closed:
